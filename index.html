@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#0f766e">
+  <meta name="description" content="Mi Asistente de Ubicación: geolocalización, mapa, cámara y registros locales.">
+  <title>Mi Asistente de Ubicación</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <h1>📍 Mi Asistente de Ubicación</h1>
+    <div class="topbar-right">
+      <span id="netStatus" class="badge">En línea</span>
+      <button id="btnInstall" class="btn small" hidden>Instalar app</button>
+    </div>
+  </header>
+
+  <!-- Aviso de privacidad / consentimiento -->
+  <section id="consentBanner" class="card consent" aria-labelledby="consentTitle">
+    <h2 id="consentTitle">🔒 Aviso de privacidad</h2>
+    <p>
+      Esta aplicación usa tu <strong>ubicación</strong> y tu <strong>cámara</strong> solo cuando tú lo solicitas.
+      Los registros y fotografías se guardan <strong>únicamente en este dispositivo</strong> (IndexedDB);
+      no se envían a ningún servidor. Puedes exportarlos o borrarlos en cualquier momento.
+      Los mosaicos del mapa se descargan de OpenStreetMap (ese servicio puede ver la zona que consultas, no tus registros).
+    </p>
+    <label class="check">
+      <input type="checkbox" id="chkConsent">
+      He leído y acepto el uso de ubicación y cámara bajo estas condiciones.
+    </label>
+    <button id="btnConsent" class="btn primary" disabled>Continuar</button>
+  </section>
+
+  <main id="app" class="grid" hidden>
+
+    <!-- Ubicación -->
+    <section class="card" aria-labelledby="locTitle">
+      <h2 id="locTitle">Ubicación</h2>
+      <div class="row">
+        <button id="btnLocate" class="btn primary">Obtener mi ubicación</button>
+      </div>
+      <p id="locStatus" class="status" role="status" aria-live="polite">Aún no se ha solicitado la ubicación.</p>
+      <dl id="locData" class="data" hidden>
+        <dt>Latitud</dt><dd id="lat">–</dd>
+        <dt>Longitud</dt><dd id="lng">–</dd>
+        <dt>Precisión</dt><dd id="acc">–</dd>
+        <dt>Fecha</dt><dd id="ts">–</dd>
+      </dl>
+      <label class="field">Nota (opcional)
+        <input type="text" id="locNote" maxlength="120" placeholder="Ej. Casa, escuela, parada de camión">
+      </label>
+      <button id="btnSaveLoc" class="btn" disabled>Guardar ubicación</button>
+    </section>
+
+    <!-- Mapa -->
+    <section class="card map-card" aria-labelledby="mapTitle">
+      <h2 id="mapTitle">Mapa</h2>
+      <div id="map" role="application" aria-label="Mapa interactivo"></div>
+      <p id="mapMsg" class="status" hidden></p>
+    </section>
+
+    <!-- Cámara -->
+    <section class="card" aria-labelledby="camTitle">
+      <h2 id="camTitle">Cámara</h2>
+      <div class="video-wrap">
+        <video id="video" autoplay playsinline muted></video>
+        <img id="preview" alt="Vista previa de la fotografía capturada" hidden>
+      </div>
+      <div class="row wrap">
+        <button id="btnCamStart" class="btn primary">Abrir cámara</button>
+        <button id="btnCamFlip" class="btn" disabled>Cambiar cámara</button>
+        <button id="btnCapture" class="btn" disabled>Capturar</button>
+        <button id="btnCamStop" class="btn" disabled>Cerrar cámara</button>
+      </div>
+      <p id="camStatus" class="status" role="status" aria-live="polite">La cámara está apagada.</p>
+      <label class="field">Descripción (opcional)
+        <input type="text" id="photoNote" maxlength="120" placeholder="Ej. Fachada del edificio">
+      </label>
+      <label class="check">
+        <input type="checkbox" id="chkAttachLoc" checked>
+        Adjuntar la última ubicación conocida a la foto
+      </label>
+      <div class="row wrap">
+        <button id="btnSavePhoto" class="btn" disabled>Guardar fotografía</button>
+        <label class="btn file" id="fileFallback" hidden>
+          Tomar foto (alternativa)
+          <input type="file" id="fileInput" accept="image/*" capture="environment" hidden>
+        </label>
+      </div>
+      <canvas id="canvas" hidden></canvas>
+    </section>
+
+    <!-- Registros -->
+    <section class="card records" aria-labelledby="recTitle">
+      <h2 id="recTitle">Mis registros</h2>
+      <div class="row wrap">
+        <select id="filter" aria-label="Filtrar registros">
+          <option value="all">Todos</option>
+          <option value="loc">Solo ubicaciones</option>
+          <option value="photo">Solo fotografías</option>
+        </select>
+        <button id="btnExport" class="btn small">Exportar JSON</button>
+        <button id="btnWipe" class="btn small danger">Borrar todo</button>
+      </div>
+      <ul id="list" class="list"></ul>
+      <p id="emptyMsg" class="status">Todavía no hay registros.</p>
+    </section>
+
+    <!-- Permisos y privacidad -->
+    <section class="card" aria-labelledby="permTitle">
+      <h2 id="permTitle">Permisos y privacidad</h2>
+      <ul class="perm">
+        <li>Ubicación: <strong id="permGeo">desconocido</strong></li>
+        <li>Cámara: <strong id="permCam">desconocido</strong></li>
+      </ul>
+      <p class="hint">
+        Si un permiso está <em>denegado</em>, ábrelo desde el ícono del candado junto a la barra de direcciones
+        (o en Ajustes del navegador → Permisos del sitio) y vuelve a cargar la página.
+      </p>
+      <button id="btnRevoke" class="btn small">Retirar mi consentimiento</button>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
